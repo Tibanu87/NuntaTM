@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.jsdelivr.net/npm/appwrite@13.0.0"></script>
     <title>Poze de la Nuntă</title>
     <style>
         * {
@@ -554,40 +555,53 @@
         }
 
         function uploadPhotos() {
-            const photoInput = document.getElementById('photoInput');
-            const files = photoInput.files;
-            
-            if (files.length === 0) {
-                alert('Vă rugăm să selectați cel puțin o poză!');
-                return;
-            }
-            
-            let uploadedCount = 0;
-            
-            for (let i = 0; i < files.length; i++) {
-                const file = files[i];
-                
-                if (file.type.startsWith('image/')) {
-                    const reader = new FileReader();
-                    reader.onload = function(e) {
-                        const photo = {
-                            id: Date.now() + i,
-                            src: e.target.result,
-                            guestName: currentGuest,
-                            uploadTime: new Date().toLocaleString('ro-RO'),
-                            originalName: file.name
-                        };
-                        
-                        photos.unshift(photo); // Adaugă la început
-                        uploadedCount++;
-                        
-                        if (uploadedCount === files.length) {
-                            displayPhotos();
-                        }
-                    };
-                    reader.readAsDataURL(file);
-                }
-            }
+            // Inițializează Appwrite
+const client = new Appwrite.Client()
+    .setEndpoint('https://cloud.appwrite.io/v1') // endpoint Appwrite Cloud
+    .setProject('YOUR_PROJECT_ID'); // pune Project ID-ul tău
+
+const storage = new Appwrite.Storage(client);
+
+async function uploadPhotos() {
+    const photoInput = document.getElementById('photoInput');
+    const files = photoInput.files;
+
+    if (files.length === 0) {
+        alert('Selectează cel puțin o poză!');
+        return;
+    }
+
+    for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+
+        try {
+            // Încarcă în bucket-ul Appwrite
+            const response = await storage.createFile(
+                'photos', // bucket ID-ul (numele bucketului)
+                Appwrite.ID.unique(),
+                file
+            );
+
+            // Link public la fișier
+            const fileUrl = client.config.endpoint + '/storage/buckets/photos/files/' + response.$id + '/view?project=' + client.config.project;
+
+            photos.unshift({
+                id: Date.now() + i,
+                src: fileUrl,
+                guestName: currentGuest,
+                uploadTime: new Date().toLocaleString('ro-RO'),
+                originalName: file.name
+            });
+
+        } catch (error) {
+            console.error("Eroare upload:", error);
+            alert("Eroare la încărcarea fișierului: " + file.name);
+        }
+    }
+
+    displayPhotos();
+    alert(`${files.length} poze au fost încărcate cu succes în Appwrite!`);
+}
             
             photoInput.value = ''; // Resetează input-ul
             alert(`${files.length} poze au fost încărcate cu succes!`);
@@ -641,4 +655,3 @@
     </script>
 </body>
 </html>
-
