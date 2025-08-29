@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Nuntă Maria si Tiberiu</title>
+    <title>Poze de la Nuntă</title>
     <style>
         * {
             margin: 0;
@@ -53,6 +53,105 @@
                 closeModal();
             }
         });
+
+        // Funcții pentru camera
+        async function openCamera() {
+            try {
+                const constraints = {
+                    video: {
+                        facingMode: 'environment', // Camera din spate
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 }
+                    }
+                };
+
+                cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
+                const video = document.getElementById('cameraVideo');
+                video.srcObject = cameraStream;
+
+                document.getElementById('cameraSection').classList.remove('hidden');
+                document.getElementById('captureBtn').disabled = false;
+
+                // Scroll către camera
+                document.getElementById('cameraSection').scrollIntoView({ 
+                    behavior: 'smooth' 
+                });
+
+            } catch (error) {
+                console.error('Eroare la accesarea camerei:', error);
+                alert('Nu s-a putut accesa camera. Verificați permisiunile și încercați din nou.');
+            }
+        }
+
+        function closeCamera() {
+            if (cameraStream) {
+                cameraStream.getTracks().forEach(track => track.stop());
+                cameraStream = null;
+            }
+            document.getElementById('cameraSection').classList.add('hidden');
+        }
+
+        function capturePhoto() {
+            const video = document.getElementById('cameraVideo');
+            const canvas = document.getElementById('cameraCanvas');
+            const ctx = canvas.getContext('2d');
+
+            // Setează dimensiunile canvas-ului la dimensiunile video-ului
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+
+            // Desenează frame-ul curent din video pe canvas
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            // Convertește canvas-ul în data URL
+            const dataURL = canvas.toDataURL('image/jpeg', 0.8);
+
+            // Creează obiectul foto și îl adaugă în galerie
+            const photo = {
+                id: Date.now(),
+                src: dataURL,
+                guestName: currentGuest,
+                uploadTime: new Date().toLocaleString('ro-RO'),
+                originalName: `camera-${Date.now()}.jpg`
+            };
+
+            photos.unshift(photo);
+            displayPhotos();
+
+            // Feedback vizual
+            const captureBtn = document.getElementById('captureBtn');
+            captureBtn.textContent = '✅ Poza salvată!';
+            captureBtn.disabled = true;
+
+            setTimeout(() => {
+                captureBtn.textContent = '📷 Fă Poza';
+                captureBtn.disabled = false;
+            }, 2000);
+
+            // Afișează galeria dacă era ascunsă
+            if (!galleryVisible) {
+                toggleGallery();
+            }
+
+            alert('Poza a fost salvată cu succes în galerie!');
+        }
+
+        function toggleGallery() {
+            const gallerySection = document.querySelector('.gallery-section');
+            const toggleBtn = document.querySelector('button[onclick="toggleGallery()"]');
+            
+            galleryVisible = !galleryVisible;
+            
+            if (galleryVisible) {
+                gallerySection.classList.remove('hidden');
+                toggleBtn.textContent = '🙈 Ascunde Galerie';
+                toggleBtn.style.background = 'linear-gradient(45deg, #ff9800, #f57c00)';
+            } else {
+                gallerySection.classList.add('hidden');
+                toggleBtn.textContent = '🖼️ Vezi Galerie';
+                toggleBtn.style.background = 'linear-gradient(45deg, #2196f3, #1976d2)';
+            }
+        }
 
         body {
             font-family: 'Georgia', serif;
@@ -319,18 +418,58 @@
             opacity: 0.8;
             margin-top: 5px;
         }
+
+        /* Camera Styles */
+        .camera-section {
+            background: #f0f8ff;
+            padding: 25px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+            border: 2px solid #2196f3;
+        }
+
+        .camera-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+        }
+
+        #cameraVideo {
+            width: 100%;
+            max-width: 400px;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+
+        .camera-controls {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .camera-btn {
+            font-size: 18px;
+            padding: 15px 30px;
+            background: linear-gradient(45deg, #4caf50, #45a049);
+        }
+
+        .gallery-section.hidden {
+            display: none;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>💕 Nuntă Maria si Tiberiu 💕</h1>
-            <p>Împărtășește momentele frumoase cu noi si adaugati poze cu voi❤️!</p>
+            <h1>💕 Poze de la Nuntă 💕</h1>
+            <p>Împărtășește momentele frumoase cu noi!</p>
         </div>
         
         <div class="content">
             <div id="welcomeForm" class="welcome-form">
-                <h3>Bună! Vă rugăm să vă introduceți numele:</h3>
+                <h3>Bună ziua! Vă rugăm să vă introduceți numele:</h3>
                 <div class="form-group">
                     <label for="guestName">Numele dumneavoastră:</label>
                     <input type="text" id="guestName" placeholder="ex: Ana și Mihai Popescu">
@@ -358,6 +497,19 @@
                         <!-- Pozele vor fi adăugate aici -->
                     </div>
                 </div>
+
+                <!-- Camera Section -->
+                <div id="cameraSection" class="camera-section hidden">
+                    <h3 style="color: #8b7355; margin-bottom: 20px;">📷 Fă o poză</h3>
+                    <div class="camera-container">
+                        <video id="cameraVideo" autoplay playsinline></video>
+                        <canvas id="cameraCanvas" style="display: none;"></canvas>
+                        <div class="camera-controls">
+                            <button class="btn camera-btn" onclick="capturePhoto()" id="captureBtn">📷 Fă Poza</button>
+                            <button class="btn" onclick="closeCamera()" style="background: linear-gradient(45deg, #f44336, #d32f2f);">❌ Închide</button>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -381,6 +533,8 @@
         let currentGuest = '';
         let photos = [];
         let currentPhotoIndex = 0;
+        let cameraStream = null;
+        let galleryVisible = true;
 
         function setGuestName() {
             const nameInput = document.getElementById('guestName');
@@ -487,4 +641,3 @@
     </script>
 </body>
 </html>
-
