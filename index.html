@@ -1,216 +1,657 @@
 <!DOCTYPE html>
 <html lang="ro">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Poze de la Nuntă</title>
-  <script src="https://cdn.jsdelivr.net/npm/appwrite@13.0.0"></script>
-  <style>
-    /* stilurile tale existente ... */
-    .gallery-btn {
-      background: linear-gradient(45deg, #2196f3, #1976d2);
-      color: white;
-      padding: 10px 20px;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-      margin-top: 15px;
-    }
-    .photo-list {
-      margin-top: 20px;
-      padding: 10px;
-      border: 1px solid #ddd;
-      border-radius: 8px;
-      background: #fafafa;
-    }
-    .photo-list li {
-      margin: 5px 0;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.jsdelivr.net/npm/appwrite@13.0.0"></script>
+    <title>Poze de la Nuntă</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        function openModal(photoIndex) {
+            currentPhotoIndex = photoIndex;
+            const photo = photos[photoIndex];
+            const modal = document.getElementById('photoModal');
+            const modalImage = document.getElementById('modalImage');
+            const modalInfo = document.getElementById('modalInfo');
+            
+            modalImage.src = photo.src;
+            modalInfo.querySelector('.guest-name').textContent = photo.guestName;
+            modalInfo.querySelector('.upload-time').textContent = photo.uploadTime;
+            
+            modal.style.display = 'block';
+            document.body.style.overflow = 'hidden'; // Previne scroll-ul în fundal
+        }
+
+        function closeModal() {
+            const modal = document.getElementById('photoModal');
+            modal.style.display = 'none';
+            document.body.style.overflow = 'auto'; // Permite scroll-ul înapoi
+        }
+
+        function downloadPhoto() {
+            const photo = photos[currentPhotoIndex];
+            const link = document.createElement('a');
+            link.download = `nunta-poze-${photo.guestName.replace(/\s+/g, '-')}-${Date.now()}.jpg`;
+            link.href = photo.src;
+            link.click();
+        }
+
+        // Închide modal-ul dacă se dă click în afara imaginii
+        document.getElementById('photoModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeModal();
+            }
+        });
+
+        // Închide modal-ul cu tasta Escape
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeModal();
+            }
+        });
+
+        // Funcții pentru camera
+        async function openCamera() {
+            try {
+                const constraints = {
+                    video: {
+                        facingMode: 'environment', // Camera din spate
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 }
+                    }
+                };
+
+                cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
+                const video = document.getElementById('cameraVideo');
+                video.srcObject = cameraStream;
+
+                document.getElementById('cameraSection').classList.remove('hidden');
+                document.getElementById('captureBtn').disabled = false;
+
+                // Scroll către camera
+                document.getElementById('cameraSection').scrollIntoView({ 
+                    behavior: 'smooth' 
+                });
+
+            } catch (error) {
+                console.error('Eroare la accesarea camerei:', error);
+                alert('Nu s-a putut accesa camera. Verificați permisiunile și încercați din nou.');
+            }
+        }
+
+        function closeCamera() {
+            if (cameraStream) {
+                cameraStream.getTracks().forEach(track => track.stop());
+                cameraStream = null;
+            }
+            document.getElementById('cameraSection').classList.add('hidden');
+        }
+
+        function capturePhoto() {
+            const video = document.getElementById('cameraVideo');
+            const canvas = document.getElementById('cameraCanvas');
+            const ctx = canvas.getContext('2d');
+
+            // Setează dimensiunile canvas-ului la dimensiunile video-ului
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+
+            // Desenează frame-ul curent din video pe canvas
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            // Convertește canvas-ul în data URL
+            const dataURL = canvas.toDataURL('image/jpeg', 0.8);
+
+            // Creează obiectul foto și îl adaugă în galerie
+            const photo = {
+                id: Date.now(),
+                src: dataURL,
+                guestName: currentGuest,
+                uploadTime: new Date().toLocaleString('ro-RO'),
+                originalName: `camera-${Date.now()}.jpg`
+            };
+
+            photos.unshift(photo);
+            displayPhotos();
+
+            // Feedback vizual
+            const captureBtn = document.getElementById('captureBtn');
+            captureBtn.textContent = '✅ Poza salvată!';
+            captureBtn.disabled = true;
+
+            setTimeout(() => {
+                captureBtn.textContent = '📷 Fă Poza';
+                captureBtn.disabled = false;
+            }, 2000);
+
+            // Afișează galeria dacă era ascunsă
+            if (!galleryVisible) {
+                toggleGallery();
+            }
+
+            alert('Poza a fost salvată cu succes în galerie!');
+        }
+
+        function toggleGallery() {
+            const gallerySection = document.querySelector('.gallery-section');
+            const toggleBtn = document.querySelector('button[onclick="toggleGallery()"]');
+            
+            galleryVisible = !galleryVisible;
+            
+            if (galleryVisible) {
+                gallerySection.classList.remove('hidden');
+                toggleBtn.textContent = '🙈 Ascunde Galerie';
+                toggleBtn.style.background = 'linear-gradient(45deg, #ff9800, #f57c00)';
+            } else {
+                gallerySection.classList.add('hidden');
+                toggleBtn.textContent = '🖼️ Vezi Galerie';
+                toggleBtn.style.background = 'linear-gradient(45deg, #2196f3, #1976d2)';
+            }
+        }
+
+        body {
+            font-family: 'Georgia', serif;
+            background: linear-gradient(135deg, #f5e6d3, #e8d5c4);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(45deg, #8b7355, #a0926b);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .welcome-form {
+            background: #f9f7f4;
+            padding: 25px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+            border: 2px solid #e8d5c4;
+        }
+
+        .welcome-form h3 {
+            color: #8b7355;
+            margin-bottom: 15px;
+            font-size: 1.4em;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #666;
+            font-weight: bold;
+        }
+
+        input[type="text"], input[type="file"] {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        input[type="text"]:focus, input[type="file"]:focus {
+            outline: none;
+            border-color: #8b7355;
+        }
+
+        .btn {
+            background: linear-gradient(45deg, #8b7355, #a0926b);
+            color: white;
+            padding: 12px 25px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(139, 115, 85, 0.3);
+        }
+
+        .photo-upload {
+            background: #f0f8ff;
+            padding: 25px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+            border: 2px dashed #8b7355;
+        }
+
+        .gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 20px;
+            margin-top: 30px;
+        }
+
+        .photo-item {
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            transition: transform 0.3s;
+            cursor: pointer;
+        }
+
+        .photo-item:hover {
+            transform: translateY(-5px);
+        }
+
+        .photo-item img {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+        }
+
+        .photo-info {
+            padding: 15px;
+        }
+
+        .photo-info .guest-name {
+            font-weight: bold;
+            color: #8b7355;
+            margin-bottom: 5px;
+        }
+
+        .photo-info .upload-time {
+            font-size: 0.9em;
+            color: #999;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .welcome-message {
+            background: #e8f5e8;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            border-left: 4px solid #4caf50;
+        }
+
+        @media (max-width: 600px) {
+            .header h1 {
+                font-size: 2em;
+            }
+            
+            .content {
+                padding: 20px;
+            }
+            
+            .gallery {
+                grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+                gap: 15px;
+            }
+        }
+
+        /* Modal pentru vizualizarea pozelor */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.9);
+        }
+
+        .modal-content {
+            position: relative;
+            margin: auto;
+            display: block;
+            max-width: 90%;
+            max-height: 90%;
+            top: 50%;
+            transform: translateY(-50%);
+            border-radius: 10px;
+        }
+
+        .modal img {
+            width: 100%;
+            height: auto;
+            border-radius: 10px;
+        }
+
+        .close {
+            position: absolute;
+            top: 20px;
+            right: 35px;
+            color: white;
+            font-size: 40px;
+            font-weight: bold;
+            cursor: pointer;
+            z-index: 1001;
+            background: rgba(0,0,0,0.5);
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .close:hover {
+            background: rgba(0,0,0,0.8);
+        }
+
+        .download-btn {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: linear-gradient(45deg, #8b7355, #a0926b);
+            color: white;
+            padding: 12px 25px;
+            border: none;
+            border-radius: 25px;
+            font-size: 16px;
+            cursor: pointer;
+            z-index: 1001;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .download-btn:hover {
+            background: linear-gradient(45deg, #a0926b, #8b7355);
+        }
+
+        .modal-info {
+            position: absolute;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 15px 25px;
+            border-radius: 20px;
+            text-align: center;
+            z-index: 1001;
+        }
+
+        .modal-info .guest-name {
+            font-weight: bold;
+            font-size: 1.1em;
+        }
+
+        .modal-info .upload-time {
+            font-size: 0.9em;
+            opacity: 0.8;
+            margin-top: 5px;
+        }
+
+        /* Camera Styles */
+        .camera-section {
+            background: #f0f8ff;
+            padding: 25px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+            border: 2px solid #2196f3;
+        }
+
+        .camera-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+        }
+
+        #cameraVideo {
+            width: 100%;
+            max-width: 400px;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+
+        .camera-controls {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .camera-btn {
+            font-size: 18px;
+            padding: 15px 30px;
+            background: linear-gradient(45deg, #4caf50, #45a049);
+        }
+
+        .gallery-section.hidden {
+            display: none;
+        }
+    </style>
 </head>
 <body>
-  <div class="container">
-    <div class="header">
-      <h1>💕 Poze Nuntă Maria si Tiberiu 💕</h1>
-      <p>Împărtășește momentele frumoase cu noi adăugând poze cu voi!💕❤️</p>
+    <div class="container">
+        <div class="header">
+            <h1>💕 Poze Nuntă Maria si Tiberiu 💕</h1>
+            <p>Împărtășește momentele frumoase cu noi adaugand poze cu voi!💕❤️</p>
+        </div>
+        
+        <div class="content">
+            <div id="welcomeForm" class="welcome-form">
+                <h3>Bună ziua! Vă rugăm să vă introduceți numele:</h3>
+                <div class="form-group">
+                    <label for="guestName">Numele dumneavoastră:</label>
+                    <input type="text" id="guestName" placeholder="ex: Ana și Mihai Popescu">
+                </div>
+                <button class="btn" onclick="setGuestName()">Confirmă</button>
+            </div>
+
+            <div id="mainApp" class="hidden">
+                <div id="welcomeMessage" class="welcome-message">
+                    <strong>Bun venit!</strong> Acum puteți adăuga poze și vedea pozele celorlalți invitați.
+                </div>
+
+                <div class="photo-upload">
+                    <h3>📸 Adaugă o poză nouă</h3>
+                    <div class="form-group">
+                        <label for="photoInput">Selectează poza:</label>
+                        <input type="file" id="photoInput" accept="image/*" multiple>
+                    </div>
+                    <button class="btn" onclick="uploadPhotos()">Încarcă Pozele</button>
+                </div>
+
+                <div class="gallery-section">
+                    <h3 style="color: #8b7355; margin-bottom: 20px;">📷 Galeria Foto</h3>
+                    <div id="photoGallery" class="gallery">
+                        <!-- Pozele vor fi adăugate aici -->
+                    </div>
+                </div>
+
+                <!-- Camera Section -->
+                <div id="cameraSection" class="camera-section hidden">
+                    <h3 style="color: #8b7355; margin-bottom: 20px;">📷 Fă o poză</h3>
+                    <div class="camera-container">
+                        <video id="cameraVideo" autoplay playsinline></video>
+                        <canvas id="cameraCanvas" style="display: none;"></canvas>
+                        <div class="camera-controls">
+                            <button class="btn camera-btn" onclick="capturePhoto()" id="captureBtn">📷 Fă Poza</button>
+                            <button class="btn" onclick="closeCamera()" style="background: linear-gradient(45deg, #f44336, #d32f2f);">❌ Închide</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
-    
-    <div class="content">
-      <div id="welcomeForm" class="welcome-form">
-        <h3>Bună ziua! Vă rugăm să vă introduceți numele:</h3>
-        <div class="form-group">
-          <label for="guestName">Numele dumneavoastră:</label>
-          <input type="text" id="guestName" placeholder="ex: Ana și Mihai Popescu">
+
+    <!-- Modal pentru vizualizarea pozelor -->
+    <div id="photoModal" class="modal">
+        <span class="close" onclick="closeModal()">&times;</span>
+        <div class="modal-content">
+            <img id="modalImage" src="" alt="Poză de la nuntă">
+            <div id="modalInfo" class="modal-info">
+                <div class="guest-name"></div>
+                <div class="upload-time"></div>
+            </div>
+            <button class="download-btn" onclick="downloadPhoto()">
+                💾 Salvează poza
+            </button>
         </div>
-        <button class="btn" onclick="setGuestName()">Confirmă</button>
-      </div>
-
-      <div id="mainApp" class="hidden">
-        <div id="welcomeMessage" class="welcome-message"></div>
-
-        <div class="photo-upload">
-          <h3>📸 Adaugă o poză nouă</h3>
-          <div class="form-group">
-            <label for="photoInput">Selectează poza:</label>
-            <input type="file" id="photoInput" accept="image/*" multiple>
-          </div>
-          <button class="btn" onclick="uploadPhotos()">Încarcă Pozele</button>
-        </div>
-
-        <!-- Buton Galerie -->
-        <button class="gallery-btn" onclick="loadGalleryFromAppwrite()">📂 Galerie completă</button>
-
-        <!-- Galeria cu poze -->
-        <div class="gallery-section">
-          <h3 style="color: #8b7355; margin-bottom: 20px;">📷 Galeria Foto</h3>
-          <div id="photoGallery" class="gallery"></div>
-        </div>
-
-        <!-- Lista de poze sub formă de link -->
-        <div class="photo-list">
-          <h4>📑 Lista fișierelor:</h4>
-          <ul id="photoList"></ul>
-        </div>
-      </div>
     </div>
-  </div>
 
-  <script>
-    // ===============================
-    // CONFIGURARE APPWRITE
-    // ===============================
-    const client = new Appwrite.Client()
-      .setEndpoint('https://cloud.appwrite.io/v1')
-      .setProject('68b1d9c5002d64986cc4'); // Project ID
+    <script>
+        let currentGuest = '';
+        let photos = [];
+        let currentPhotoIndex = 0;
+        let cameraStream = null;
+        let galleryVisible = true;
 
-    const storage = new Appwrite.Storage(client);
-    const bucketId = '68b1da9b002d5fd5fe09'; // Bucket ID
+        function setGuestName() {
+            const nameInput = document.getElementById('guestName');
+            const name = nameInput.value.trim();
+            
+            if (name === '') {
+                alert('Vă rugăm să introduceți numele!');
+                return;
+            }
+            
+            currentGuest = name;
+            document.getElementById('welcomeForm').classList.add('hidden');
+            document.getElementById('mainApp').classList.remove('hidden');
+            
+            const welcomeMsg = document.getElementById('welcomeMessage');
+            welcomeMsg.innerHTML = `<strong>Bun venit, ${currentGuest}!</strong> Acum puteți adăuga poze și vedea pozele celorlalților invitați.`;
+        }
 
-    // ===============================
-    // VARIABILE LOCALE
-    // ===============================
-    let currentGuest = '';
-    let photos = [];
+        function uploadPhotos() {
+            // Inițializează Appwrite
+const client = new Appwrite.Client()
+    .setEndpoint('https://cloud.appwrite.io/v1') // endpoint Appwrite Cloud
+    .setProject('YOUR_PROJECT_ID'); // pune Project ID-ul tău
 
-    // ===============================
-    // LOGICA APLICAȚIEI
-    // ===============================
-    function setGuestName() {
-      const nameInput = document.getElementById('guestName');
-      const name = nameInput.value.trim();
-      if (name === '') {
-        alert('Vă rugăm să introduceți numele!');
-        return;
-      }
-      currentGuest = name;
-      document.getElementById('welcomeForm').classList.add('hidden');
-      document.getElementById('mainApp').classList.remove('hidden');
-      document.getElementById('welcomeMessage').innerHTML =
-        `<strong>Bun venit, ${currentGuest}!</strong> Acum puteți adăuga poze și vedea pozele celorlalți invitați.`;
-    }
+const storage = new Appwrite.Storage(client);
 
-    async function uploadPhotos() {
-      const photoInput = document.getElementById('photoInput');
-      const files = photoInput.files;
-      if (files.length === 0) {
+async function uploadPhotos() {
+    const photoInput = document.getElementById('photoInput');
+    const files = photoInput.files;
+
+    if (files.length === 0) {
         alert('Selectează cel puțin o poză!');
         return;
-      }
+    }
 
-      for (let i = 0; i < files.length; i++) {
+    for (let i = 0; i < files.length; i++) {
         const file = files[i];
+
         try {
-          const response = await storage.createFile(
-            bucketId,
-            Appwrite.ID.unique(),
-            file
-          );
+            // Încarcă în bucket-ul Appwrite
+            const response = await storage.createFile(
+                'photos', // bucket ID-ul (numele bucketului)
+                Appwrite.ID.unique(),
+                file
+            );
 
-          const fileUrl =
-            client.config.endpoint +
-            '/storage/buckets/' + bucketId +
-            '/files/' + response.$id +
-            '/view?project=' + client.config.project;
+            // Link public la fișier
+            const fileUrl = client.config.endpoint + '/storage/buckets/photos/files/' + response.$id + '/view?project=' + client.config.project;
 
-          photos.unshift({
-            id: response.$id,
-            src: fileUrl,
-            guestName: currentGuest,
-            uploadTime: new Date().toLocaleString('ro-RO'),
-            originalName: file.name
-          });
-
-          // Adaugă link în listă
-          const listItem = document.createElement('li');
-          listItem.innerHTML = `<a href="${fileUrl}" target="_blank">${currentGuest} – ${file.name}</a>`;
-          document.getElementById('photoList').prepend(listItem);
+            photos.unshift({
+                id: Date.now() + i,
+                src: fileUrl,
+                guestName: currentGuest,
+                uploadTime: new Date().toLocaleString('ro-RO'),
+                originalName: file.name
+            });
 
         } catch (error) {
-          console.error("Eroare upload:", error);
-          alert("Eroare la încărcarea fișierului: " + file.name);
+            console.error("Eroare upload:", error);
+            alert("Eroare la încărcarea fișierului: " + file.name);
         }
-      }
-
-      displayPhotos();
-      alert("Upload reușit!"); // mesajul cerut
-      photoInput.value = '';
     }
 
-    function displayPhotos() {
-      const gallery = document.getElementById('photoGallery');
-      if (photos.length === 0) {
-        gallery.innerHTML =
-          '<p style="text-align: center; color: #999; grid-column: 1/-1;">Încă nu au fost încărcate poze.</p>';
-        return;
-      }
-      gallery.innerHTML = photos.map((photo) => `
-        <div class="photo-item">
-          <img src="${photo.src}" alt="Poză de la nuntă" loading="lazy">
-          <div class="photo-info">
-            <div class="guest-name">${photo.guestName}</div>
-            <div class="upload-time">${photo.uploadTime}</div>
-          </div>
-        </div>
-      `).join('');
-    }
+    displayPhotos();
+    alert(`${files.length} poze au fost încărcate cu succes în Appwrite!`);
+}
+            
+            photoInput.value = ''; // Resetează input-ul
+            alert(`${files.length} poze au fost încărcate cu succes!`);
+        }
 
-    // ===============================
-    // GALERIA COMPLETĂ DIN APPWRITE
-    // ===============================
-    async function loadGalleryFromAppwrite() {
-      try {
-        const result = await storage.listFiles(bucketId);
+        function displayPhotos() {
+            const gallery = document.getElementById('photoGallery');
+            
+            if (photos.length === 0) {
+                gallery.innerHTML = '<p style="text-align: center; color: #999; grid-column: 1/-1;">Încă nu au fost încărcate poze. Fiți primul care adaugă o poză!</p>';
+                return;
+            }
+            
+            gallery.innerHTML = photos.map((photo, index) => `
+                <div class="photo-item" onclick="openModal(${index})">
+                    <img src="${photo.src}" alt="Poză de la nuntă" loading="lazy">
+                    <div class="photo-info">
+                        <div class="guest-name">${photo.guestName}</div>
+                        <div class="upload-time">${photo.uploadTime}</div>
+                    </div>
+                </div>
+            `).join('');
+        }
 
-        photos = result.files.map(file => {
-          const fileUrl =
-            client.config.endpoint +
-            '/storage/buckets/' + bucketId +
-            '/files/' + file.$id +
-            '/view?project=' + client.config.project;
-          return {
-            id: file.$id,
-            src: fileUrl,
-            guestName: file.name.split('-')[0] || "Invitat necunoscut",
-            uploadTime: new Date(file.$createdAt).toLocaleString('ro-RO'),
-            originalName: file.name
-          };
-        });
-
-        // Populează lista cu linkuri
-        const list = document.getElementById('photoList');
-        list.innerHTML = "";
-        photos.forEach(photo => {
-          const li = document.createElement('li');
-          li.innerHTML = `<a href="${photo.src}" target="_blank">${photo.guestName} – ${photo.originalName}</a>`;
-          list.appendChild(li);
-        });
-
+        // Inițializează galeria
         displayPhotos();
-      } catch (error) {
-        console.error("Eroare la încărcarea galeriei:", error);
-        alert("Nu s-a putut încărca galeria.");
-      }
-    }
-  </script>
+
+        // Adaugă câteva poze demo pentru a arăta cum funcționează
+        function addDemoPhotos() {
+            const demoPhotos = [
+                {
+                    id: 1,
+                    src: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2Y0ZjRmNCIvPjx0ZXh0IHg9IjEwMCIgeT0iMTAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTYiIGZpbGw9IiM5OTkiPkRlbW8gUG96YSAxPC90ZXh0Pjwvc3ZnPg==',
+                    guestName: 'Maria și Ion',
+                    uploadTime: new Date().toLocaleString('ro-RO')
+                },
+                {
+                    id: 2,
+                    src: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2U4ZDVjNCIvPjx0ZXh0IHg9IjEwMCIgeT0iMTAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTYiIGZpbGw9IiM4Yjc0NTUiPkRlbW8gUG96YSAyPC90ZXh0Pjwvc3ZnPg==',
+                    guestName: 'Familia Georgescu',
+                    uploadTime: new Date().toLocaleString('ro-RO')
+                }
+            ];
+            
+            photos = demoPhotos;
+            displayPhotos();
+        }
+
+        // Adaugă pozele demo la încărcarea paginii
+        addDemoPhotos();
+    </script>
 </body>
 </html>
