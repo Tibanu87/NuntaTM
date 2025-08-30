@@ -3,155 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <script src="https://cdn.jsdelivr.net/npm/appwrite@13.0.0"></script>
     <title>Poze de la Nuntă</title>
     <style>
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-        }
-
-        function openModal(photoIndex) {
-            currentPhotoIndex = photoIndex;
-            const photo = photos[photoIndex];
-            const modal = document.getElementById('photoModal');
-            const modalImage = document.getElementById('modalImage');
-            const modalInfo = document.getElementById('modalInfo');
-            
-            modalImage.src = photo.src;
-            modalInfo.querySelector('.guest-name').textContent = photo.guestName;
-            modalInfo.querySelector('.upload-time').textContent = photo.uploadTime;
-            
-            modal.style.display = 'block';
-            document.body.style.overflow = 'hidden'; // Previne scroll-ul în fundal
-        }
-
-        function closeModal() {
-            const modal = document.getElementById('photoModal');
-            modal.style.display = 'none';
-            document.body.style.overflow = 'auto'; // Permite scroll-ul înapoi
-        }
-
-        function downloadPhoto() {
-            const photo = photos[currentPhotoIndex];
-            const link = document.createElement('a');
-            link.download = `nunta-poze-${photo.guestName.replace(/\s+/g, '-')}-${Date.now()}.jpg`;
-            link.href = photo.src;
-            link.click();
-        }
-
-        // Închide modal-ul dacă se dă click în afara imaginii
-        document.getElementById('photoModal').addEventListener('click', function(e) {
-            if (e.target === this) {
-                closeModal();
-            }
-        });
-
-        // Închide modal-ul cu tasta Escape
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') {
-                closeModal();
-            }
-        });
-
-        // Funcții pentru camera
-        async function openCamera() {
-            try {
-                const constraints = {
-                    video: {
-                        facingMode: 'environment', // Camera din spate
-                        width: { ideal: 1920 },
-                        height: { ideal: 1080 }
-                    }
-                };
-
-                cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
-                const video = document.getElementById('cameraVideo');
-                video.srcObject = cameraStream;
-
-                document.getElementById('cameraSection').classList.remove('hidden');
-                document.getElementById('captureBtn').disabled = false;
-
-                // Scroll către camera
-                document.getElementById('cameraSection').scrollIntoView({ 
-                    behavior: 'smooth' 
-                });
-
-            } catch (error) {
-                console.error('Eroare la accesarea camerei:', error);
-                alert('Nu s-a putut accesa camera. Verificați permisiunile și încercați din nou.');
-            }
-        }
-
-        function closeCamera() {
-            if (cameraStream) {
-                cameraStream.getTracks().forEach(track => track.stop());
-                cameraStream = null;
-            }
-            document.getElementById('cameraSection').classList.add('hidden');
-        }
-
-        function capturePhoto() {
-            const video = document.getElementById('cameraVideo');
-            const canvas = document.getElementById('cameraCanvas');
-            const ctx = canvas.getContext('2d');
-
-            // Setează dimensiunile canvas-ului la dimensiunile video-ului
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-
-            // Desenează frame-ul curent din video pe canvas
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-            // Convertește canvas-ul în data URL
-            const dataURL = canvas.toDataURL('image/jpeg', 0.8);
-
-            // Creează obiectul foto și îl adaugă în galerie
-            const photo = {
-                id: Date.now(),
-                src: dataURL,
-                guestName: currentGuest,
-                uploadTime: new Date().toLocaleString('ro-RO'),
-                originalName: `camera-${Date.now()}.jpg`
-            };
-
-            photos.unshift(photo);
-            displayPhotos();
-
-            // Feedback vizual
-            const captureBtn = document.getElementById('captureBtn');
-            captureBtn.textContent = '✅ Poza salvată!';
-            captureBtn.disabled = true;
-
-            setTimeout(() => {
-                captureBtn.textContent = '📷 Fă Poza';
-                captureBtn.disabled = false;
-            }, 2000);
-
-            // Afișează galeria dacă era ascunsă
-            if (!galleryVisible) {
-                toggleGallery();
-            }
-
-            alert('Poza a fost salvată cu succes în galerie!');
-        }
-
-        function toggleGallery() {
-            const gallerySection = document.querySelector('.gallery-section');
-            const toggleBtn = document.querySelector('button[onclick="toggleGallery()"]');
-            
-            galleryVisible = !galleryVisible;
-            
-            if (galleryVisible) {
-                gallerySection.classList.remove('hidden');
-                toggleBtn.textContent = '🙈 Ascunde Galerie';
-                toggleBtn.style.background = 'linear-gradient(45deg, #ff9800, #f57c00)';
-            } else {
-                gallerySection.classList.add('hidden');
-                toggleBtn.textContent = '🖼️ Vezi Galerie';
-                toggleBtn.style.background = 'linear-gradient(45deg, #2196f3, #1976d2)';
-            }
         }
 
         body {
@@ -240,11 +97,19 @@
             font-size: 16px;
             cursor: pointer;
             transition: transform 0.2s, box-shadow 0.2s;
+            margin-right: 10px;
+            margin-bottom: 10px;
         }
 
         .btn:hover {
             transform: translateY(-2px);
             box-shadow: 0 5px 15px rgba(139, 115, 85, 0.3);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
         }
 
         .photo-upload {
@@ -257,7 +122,7 @@
 
         .gallery {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
             gap: 20px;
             margin-top: 30px;
         }
@@ -308,19 +173,29 @@
             border-left: 4px solid #4caf50;
         }
 
-        @media (max-width: 600px) {
-            .header h1 {
-                font-size: 2em;
-            }
-            
-            .content {
-                padding: 20px;
-            }
-            
-            .gallery {
-                grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-                gap: 15px;
-            }
+        .status-message {
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .status-success {
+            background: #e8f5e8;
+            border-left: 4px solid #4caf50;
+            color: #2e7d2e;
+        }
+
+        .status-error {
+            background: #ffebee;
+            border-left: 4px solid #f44336;
+            color: #c62828;
+        }
+
+        .status-loading {
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            color: #1565c0;
         }
 
         /* Modal pentru vizualizarea pozelor */
@@ -459,16 +334,55 @@
         .gallery-section.hidden {
             display: none;
         }
+
+        .loading-spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #8b7355;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 2s linear infinite;
+            margin: 20px auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 600px) {
+            .header h1 {
+                font-size: 2em;
+            }
+            
+            .content {
+                padding: 20px;
+            }
+            
+            .gallery {
+                grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+                gap: 15px;
+            }
+
+            .btn {
+                width: 100%;
+                margin-right: 0;
+                margin-bottom: 10px;
+            }
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>💕 Poze Nuntă Maria si Tiberiu 💕</h1>
-            <p>Împărtășește momentele frumoase cu noi adaugand poze cu voi!💕❤️</p>
+            <h1>💕 Poze de la Nuntă 💕</h1>
+            <p>Împărtășește momentele frumoase cu noi!</p>
         </div>
         
         <div class="content">
+            <!-- Status Messages -->
+            <div id="statusMessage" class="status-message hidden"></div>
+
             <div id="welcomeForm" class="welcome-form">
                 <h3>Bună ziua! Vă rugăm să vă introduceți numele:</h3>
                 <div class="form-group">
@@ -487,15 +401,13 @@
                     <h3>📸 Adaugă o poză nouă</h3>
                     <div class="form-group">
                         <label for="photoInput">Selectează poza:</label>
-                        <input type="file" id="photoInput" accept="image/*" multiple>
+                        <input type="file" id="photoInput" accept="image/*" multiple capture="environment">
                     </div>
-                    <button class="btn" onclick="uploadPhotos()">Încarcă Pozele</button>
-                </div>
-
-                <div class="gallery-section">
-                    <h3 style="color: #8b7355; margin-bottom: 20px;">📷 Galeria Foto</h3>
-                    <div id="photoGallery" class="gallery">
-                        <!-- Pozele vor fi adăugate aici -->
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                        <button class="btn" onclick="uploadPhotos()" id="uploadBtn">📤 Încarcă Pozele</button>
+                        <button class="btn" onclick="openCamera()" id="cameraBtn" style="background: linear-gradient(45deg, #4caf50, #45a049);">📷 Deschide Camera</button>
+                        <button class="btn" onclick="toggleGallery()" id="galleryToggleBtn" style="background: linear-gradient(45deg, #2196f3, #1976d2);">🖼️ Vezi Galerie</button>
+                        <button class="btn" onclick="refreshGallery()" id="refreshBtn" style="background: linear-gradient(45deg, #ff9800, #f57c00);">🔄 Reîncarcă</button>
                     </div>
                 </div>
 
@@ -509,6 +421,14 @@
                             <button class="btn camera-btn" onclick="capturePhoto()" id="captureBtn">📷 Fă Poza</button>
                             <button class="btn" onclick="closeCamera()" style="background: linear-gradient(45deg, #f44336, #d32f2f);">❌ Închide</button>
                         </div>
+                    </div>
+                </div>
+
+                <div class="gallery-section" id="gallerySection">
+                    <h3 style="color: #8b7355; margin-bottom: 20px;">📷 Galeria Foto</h3>
+                    <div id="photoGallery" class="gallery">
+                        <div class="loading-spinner"></div>
+                        <p style="text-align: center; color: #999; grid-column: 1/-1;">Se încarcă pozele...</p>
                     </div>
                 </div>
             </div>
@@ -530,12 +450,62 @@
         </div>
     </div>
 
+    <!-- Appwrite SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/appwrite@13.0.0"></script>
+    
     <script>
+        // ========== CONFIGURARE APPWRITE ==========
+        const APPWRITE_ENDPOINT = 'https://fra.cloud.appwrite.io/v1';
+        const APPWRITE_PROJECT_ID = '68b1d9c5002d64986cc4';
+        const APPWRITE_DATABASE_ID = 'nunta-database';
+        const APPWRITE_COLLECTION_ID = 'photos';
+        const APPWRITE_BUCKET_ID = '68b1da9b002d5fd5fe09';
+
+        // Inițializare Appwrite
+        const { Client, Account, Databases, Storage, ID } = Appwrite;
+        
+        const client = new Client();
+        client
+            .setEndpoint(APPWRITE_ENDPOINT)
+            .setProject(APPWRITE_PROJECT_ID);
+
+        const account = new Account(client);
+        const databases = new Databases(client);
+        const storage = new Storage(client);
+
+        // ========== VARIABILE GLOBALE ==========
         let currentGuest = '';
         let photos = [];
         let currentPhotoIndex = 0;
         let cameraStream = null;
         let galleryVisible = true;
+        let isAuthenticated = false;
+
+        // ========== FUNCȚII PRINCIPALE ==========
+        
+        // Inițializare aplicație
+        window.addEventListener('load', async () => {
+            await authenticateUser();
+            await loadPhotos();
+        });
+
+        // Autentificare anonimă
+        async function authenticateUser() {
+            try {
+                // Încearcă să obții sesiunea curentă
+                await account.get();
+                isAuthenticated = true;
+            } catch (error) {
+                try {
+                    // Creează sesiune anonimă
+                    await account.createAnonymousSession();
+                    isAuthenticated = true;
+                } catch (authError) {
+                    showStatus('Eroare la autentificare: ' + authError.message, 'error');
+                    console.error('Auth error:', authError);
+                }
+            }
+        }
 
         function setGuestName() {
             const nameInput = document.getElementById('guestName');
@@ -552,61 +522,128 @@
             
             const welcomeMsg = document.getElementById('welcomeMessage');
             welcomeMsg.innerHTML = `<strong>Bun venit, ${currentGuest}!</strong> Acum puteți adăuga poze și vedea pozele celorlalților invitați.`;
-        }
-
-        function uploadPhotos() {
-            // Inițializează Appwrite
-const client = new Appwrite.Client()
-    .setEndpoint('https://cloud.appwrite.io/v1') // endpoint Appwrite Cloud
-    .setProject('YOUR_PROJECT_ID'); // pune Project ID-ul tău
-
-const storage = new Appwrite.Storage(client);
-
-async function uploadPhotos() {
-    const photoInput = document.getElementById('photoInput');
-    const files = photoInput.files;
-
-    if (files.length === 0) {
-        alert('Selectează cel puțin o poză!');
-        return;
-    }
-
-    for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-
-        try {
-            // Încarcă în bucket-ul Appwrite
-            const response = await storage.createFile(
-                'photos', // bucket ID-ul (numele bucketului)
-                Appwrite.ID.unique(),
-                file
-            );
-
-            // Link public la fișier
-            const fileUrl = client.config.endpoint + '/storage/buckets/photos/files/' + response.$id + '/view?project=' + client.config.project;
-
-            photos.unshift({
-                id: Date.now() + i,
-                src: fileUrl,
-                guestName: currentGuest,
-                uploadTime: new Date().toLocaleString('ro-RO'),
-                originalName: file.name
-            });
-
-        } catch (error) {
-            console.error("Eroare upload:", error);
-            alert("Eroare la încărcarea fișierului: " + file.name);
-        }
-    }
-
-    displayPhotos();
-    alert(`${files.length} poze au fost încărcate cu succes în Appwrite!`);
-}
             
-            photoInput.value = ''; // Resetează input-ul
-            alert(`${files.length} poze au fost încărcate cu succes!`);
+            loadPhotos();
         }
 
+        // Încărcare poze din fișiere
+        async function uploadPhotos() {
+            const photoInput = document.getElementById('photoInput');
+            const files = photoInput.files;
+            
+            if (files.length === 0) {
+                alert('Vă rugăm să selectați cel puțin o poză!');
+                return;
+            }
+
+            if (!isAuthenticated) {
+                showStatus('Nu sunteți autentificat. Încercați din nou.', 'error');
+                return;
+            }
+            
+            const uploadBtn = document.getElementById('uploadBtn');
+            uploadBtn.disabled = true;
+            uploadBtn.textContent = '⏳ Se încarcă...';
+            
+            let successCount = 0;
+            
+            for (let file of files) {
+                if (file.type.startsWith('image/')) {
+                    try {
+                        await uploadSinglePhoto(file);
+                        successCount++;
+                    } catch (error) {
+                        console.error('Eroare la încărcarea pozei:', error);
+                        showStatus('Eroare la încărcarea unei poze: ' + error.message, 'error');
+                    }
+                }
+            }
+            
+            photoInput.value = '';
+            uploadBtn.disabled = false;
+            uploadBtn.textContent = '📤 Încarcă Pozele';
+            
+            if (successCount > 0) {
+                showStatus(`${successCount} poze au fost încărcate cu succes!`, 'success');
+                await loadPhotos();
+            }
+        }
+
+        // Încarcă o singură poză
+        async function uploadSinglePhoto(file) {
+            try {
+                // Upload fișier în storage
+                const fileUpload = await storage.createFile(
+                    APPWRITE_BUCKET_ID,
+                    ID.unique(),
+                    file
+                );
+
+                // Creează înregistrarea în database
+                const photoDoc = await databases.createDocument(
+                    APPWRITE_DATABASE_ID,
+                    APPWRITE_COLLECTION_ID,
+                    ID.unique(),
+                    {
+                        fileId: fileUpload.$id,
+                        guestName: currentGuest,
+                        fileName: file.name,
+                        fileSize: file.size,
+                        uploadTime: new Date().toISOString()
+                    }
+                );
+
+                return photoDoc;
+            } catch (error) {
+                console.error('Upload error:', error);
+                throw error;
+            }
+        }
+
+        // Încărcarea pozelor din database
+        async function loadPhotos() {
+            if (!isAuthenticated) return;
+            
+            showStatus('Se încarcă pozele...', 'loading');
+            
+            try {
+                const response = await databases.listDocuments(
+                    APPWRITE_DATABASE_ID,
+                    APPWRITE_COLLECTION_ID
+                );
+
+                photos = [];
+                
+                for (let doc of response.documents) {
+                    try {
+                        const fileUrl = storage.getFileView(APPWRITE_BUCKET_ID, doc.fileId);
+                        
+                        photos.push({
+                            id: doc.$id,
+                            src: fileUrl,
+                            guestName: doc.guestName,
+                            uploadTime: new Date(doc.uploadTime).toLocaleString('ro-RO'),
+                            fileId: doc.fileId,
+                            fileName: doc.fileName || 'poze-nunta.jpg'
+                        });
+                    } catch (fileError) {
+                        console.error('Eroare la încărcarea fișierului:', fileError);
+                    }
+                }
+                
+                // Sortează pozele după data încărcării (cele mai noi primul)
+                photos.sort((a, b) => new Date(b.uploadTime) - new Date(a.uploadTime));
+                
+                displayPhotos();
+                hideStatus();
+                
+            } catch (error) {
+                console.error('Load photos error:', error);
+                showStatus('Eroare la încărcarea pozelor: ' + error.message, 'error');
+            }
+        }
+
+        // Afișarea pozelor în galerie
         function displayPhotos() {
             const gallery = document.getElementById('photoGallery');
             
@@ -617,7 +654,7 @@ async function uploadPhotos() {
             
             gallery.innerHTML = photos.map((photo, index) => `
                 <div class="photo-item" onclick="openModal(${index})">
-                    <img src="${photo.src}" alt="Poză de la nuntă" loading="lazy">
+                    <img src="${photo.src}" alt="Poză de la nuntă" loading="lazy" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2Y0ZjRmNCIvPjx0ZXh0IHg9IjEwMCIgeT0iMTAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTYiIGZpbGw9IiM5OTkiPkVyb2FyZSBpbmNhcmNhcmU8L3RleHQ+PC9zdmc+'">
                     <div class="photo-info">
                         <div class="guest-name">${photo.guestName}</div>
                         <div class="upload-time">${photo.uploadTime}</div>
@@ -626,32 +663,178 @@ async function uploadPhotos() {
             `).join('');
         }
 
-        // Inițializează galeria
-        displayPhotos();
+        // ========== FUNCȚII CAMERA ==========
+        async function openCamera() {
+            try {
+                const constraints = {
+                    video: {
+                        facingMode: 'environment',
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 }
+                    }
+                };
 
-        // Adaugă câteva poze demo pentru a arăta cum funcționează
-        function addDemoPhotos() {
-            const demoPhotos = [
-                {
-                    id: 1,
-                    src: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2Y0ZjRmNCIvPjx0ZXh0IHg9IjEwMCIgeT0iMTAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTYiIGZpbGw9IiM5OTkiPkRlbW8gUG96YSAxPC90ZXh0Pjwvc3ZnPg==',
-                    guestName: 'Maria și Ion',
-                    uploadTime: new Date().toLocaleString('ro-RO')
-                },
-                {
-                    id: 2,
-                    src: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2U4ZDVjNCIvPjx0ZXh0IHg9IjEwMCIgeT0iMTAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTYiIGZpbGw9IiM4Yjc0NTUiPkRlbW8gUG96YSAyPC90ZXh0Pjwvc3ZnPg==',
-                    guestName: 'Familia Georgescu',
-                    uploadTime: new Date().toLocaleString('ro-RO')
-                }
-            ];
-            
-            photos = demoPhotos;
-            displayPhotos();
+                cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
+                const video = document.getElementById('cameraVideo');
+                video.srcObject = cameraStream;
+
+                document.getElementById('cameraSection').classList.remove('hidden');
+                document.getElementById('captureBtn').disabled = false;
+
+                document.getElementById('cameraSection').scrollIntoView({ 
+                    behavior: 'smooth' 
+                });
+
+            } catch (error) {
+                console.error('Eroare la accesarea camerei:', error);
+                alert('Nu s-a putut accesa camera. Verificați permisiunile și încercați din nou.');
+            }
         }
 
-        // Adaugă pozele demo la încărcarea paginii
-        addDemoPhotos();
+        function closeCamera() {
+            if (cameraStream) {
+                cameraStream.getTracks().forEach(track => track.stop());
+                cameraStream = null;
+            }
+            document.getElementById('cameraSection').classList.add('hidden');
+        }
+
+        async function capturePhoto() {
+            const video = document.getElementById('cameraVideo');
+            const canvas = document.getElementById('cameraCanvas');
+            
+            if (!video.videoWidth || !video.videoHeight) {
+                alert('Camera nu este încă gata. Încercați din nou în câteva secunde.');
+                return;
+            }
+            
+            const ctx = canvas.getContext('2d');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            // Convertește canvas în blob
+            canvas.toBlob(async (blob) => {
+                const captureBtn = document.getElementById('captureBtn');
+                const originalText = captureBtn.textContent;
+                captureBtn.textContent = '⏳ Se salvează...';
+                captureBtn.disabled = true;
+
+                try {
+                    // Creează file din blob
+                    const timestamp = Date.now();
+                    const file = new File([blob], `camera-${timestamp}.jpg`, { type: 'image/jpeg' });
+                    
+                    await uploadSinglePhoto(file);
+                    
+                    showStatus('Poza a fost salvată cu succes!', 'success');
+                    await loadPhotos();
+                    
+                    if (!galleryVisible) {
+                        toggleGallery();
+                    }
+                    
+                } catch (error) {
+                    console.error('Eroare la salvarea pozei:', error);
+                    showStatus('Eroare la salvarea pozei: ' + error.message, 'error');
+                } finally {
+                    captureBtn.textContent = originalText;
+                    captureBtn.disabled = false;
+                }
+            }, 'image/jpeg', 0.9);
+        }
+
+        // ========== FUNCȚII MODAL ȘI GALERIE ==========
+        function openModal(photoIndex) {
+            currentPhotoIndex = photoIndex;
+            const photo = photos[photoIndex];
+            const modal = document.getElementById('photoModal');
+            const modalImage = document.getElementById('modalImage');
+            const modalInfo = document.getElementById('modalInfo');
+            
+            modalImage.src = photo.src;
+            modalInfo.querySelector('.guest-name').textContent = photo.guestName;
+            modalInfo.querySelector('.upload-time').textContent = photo.uploadTime;
+            
+            modal.style.display = 'block';
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeModal() {
+            const modal = document.getElementById('photoModal');
+            modal.style.display = 'none';
+            document.body.style.overflow = 'auto';
+        }
+
+        async function downloadPhoto() {
+            const photo = photos[currentPhotoIndex];
+            try {
+                const response = await fetch(photo.src);
+                const blob = await response.blob();
+                
+                const link = document.createElement('a');
+                link.download = `nunta-${photo.guestName.replace(/\s+/g, '-')}-${Date.now()}.jpg`;
+                link.href = URL.createObjectURL(blob);
+                link.click();
+                
+                URL.revokeObjectURL(link.href);
+            } catch (error) {
+                console.error('Download error:', error);
+                alert('Eroare la descărcarea pozei.');
+            }
+        }
+
+        function toggleGallery() {
+            const gallerySection = document.getElementById('gallerySection');
+            const toggleBtn = document.getElementById('galleryToggleBtn');
+            
+            galleryVisible = !galleryVisible;
+            
+            if (galleryVisible) {
+                gallerySection.classList.remove('hidden');
+                toggleBtn.textContent = '🙈 Ascunde Galerie';
+                toggleBtn.style.background = 'linear-gradient(45deg, #ff9800, #f57c00)';
+            } else {
+                gallerySection.classList.add('hidden');
+                toggleBtn.textContent = '🖼️ Vezi Galerie';
+                toggleBtn.style.background = 'linear-gradient(45deg, #2196f3, #1976d2)';
+            }
+        }
+
+        async function refreshGallery() {
+            showStatus('Se reîncarcă galeria...', 'loading');
+            await loadPhotos();
+        }
+
+        // ========== FUNCȚII UTILITARE ==========
+        function showStatus(message, type) {
+            const statusDiv = document.getElementById('statusMessage');
+            statusDiv.textContent = message;
+            statusDiv.className = `status-message status-${type}`;
+            statusDiv.classList.remove('hidden');
+            
+            if (type === 'success') {
+                setTimeout(() => hideStatus(), 3000);
+            }
+        }
+
+        function hideStatus() {
+            const statusDiv = document.getElementById('statusMessage');
+            statusDiv.classList.add('hidden');
+        }
+
+        // Event listeners
+        document.getElementById('photoModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeModal();
+            }
+        });
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeModal();
+            }
+        });
     </script>
 </body>
 </html>
