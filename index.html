@@ -461,18 +461,6 @@
         const APPWRITE_COLLECTION_ID = 'photos';
         const APPWRITE_BUCKET_ID = '68b1da9b002d5fd5fe09';
 
-        // Inițializare Appwrite
-        const { Client, Account, Databases, Storage, ID } = Appwrite;
-        
-        const client = new Client();
-        client
-            .setEndpoint(APPWRITE_ENDPOINT)
-            .setProject(APPWRITE_PROJECT_ID);
-
-        const account = new Account(client);
-        const databases = new Databases(client);
-        const storage = new Storage(client);
-
         // ========== VARIABILE GLOBALE ==========
         let currentGuest = '';
         let photos = [];
@@ -480,29 +468,67 @@
         let cameraStream = null;
         let galleryVisible = true;
         let isAuthenticated = false;
+        
+        // Declarații Appwrite
+        let client, account, databases, storage;
 
         // ========== FUNCȚII PRINCIPALE ==========
         
         // Inițializare aplicație
         window.addEventListener('load', async () => {
-            await authenticateUser();
-            await loadPhotos();
+            await initializeAppwrite();
         });
+
+        // Inițializarea Appwrite
+        async function initializeAppwrite() {
+            try {
+                // Testează dacă Appwrite SDK este disponibil
+                if (typeof Appwrite === 'undefined') {
+                    throw new Error('SDK-ul Appwrite nu a fost încărcat');
+                }
+
+                const { Client, Account, Databases, Storage, ID } = Appwrite;
+                
+                client = new Client();
+                client
+                    .setEndpoint(APPWRITE_ENDPOINT)
+                    .setProject(APPWRITE_PROJECT_ID);
+
+                account = new Account(client);
+                databases = new Databases(client);
+                storage = new Storage(client);
+
+                // Încearcă autentificarea
+                await authenticateUser();
+                
+                // Dacă suntem autentificați, încearcă să încarce pozele
+                if (isAuthenticated) {
+                    await loadPhotos();
+                }
+                
+            } catch (error) {
+                console.error('Eroare la inițializarea Appwrite:', error);
+                showStatus('Eroare la inițializarea aplicației. Verificați conexiunea la internet.', 'error');
+            }
+        }
 
         // Autentificare anonimă
         async function authenticateUser() {
             try {
                 // Încearcă să obții sesiunea curentă
-                await account.get();
+                const user = await account.get();
                 isAuthenticated = true;
+                console.log('Utilizator deja autentificat:', user);
             } catch (error) {
+                console.log('Nu există sesiune activă, se creează sesiune anonimă...');
                 try {
                     // Creează sesiune anonimă
-                    await account.createAnonymousSession();
+                    const session = await account.createAnonymousSession();
                     isAuthenticated = true;
+                    console.log('Sesiune anonimă creată:', session);
                 } catch (authError) {
-                    showStatus('Eroare la autentificare: ' + authError.message, 'error');
-                    console.error('Auth error:', authError);
+                    console.error('Eroare la autentificare:', authError);
+                    showStatus('Nu s-a putut stabili conexiunea. Verificați internetul și reîncărcați pagina.', 'error');
                 }
             }
         }
@@ -523,7 +549,17 @@
             const welcomeMsg = document.getElementById('welcomeMessage');
             welcomeMsg.innerHTML = `<strong>Bun venit, ${currentGuest}!</strong> Acum puteți adăuga poze și vedea pozele celorlalților invitați.`;
             
-            loadPhotos();
+            // Încearcă să încarce pozele doar dacă suntem autentificați
+            if (isAuthenticated) {
+                loadPhotos();
+            } else {
+                showStatus('Se încearcă reconectarea...', 'loading');
+                authenticateUser().then(() => {
+                    if (isAuthenticated) {
+                        loadPhotos();
+                    }
+                });
+            }
         }
 
         // Încărcare poze din fișiere
@@ -537,8 +573,12 @@
             }
 
             if (!isAuthenticated) {
-                showStatus('Nu sunteți autentificat. Încercați din nou.', 'error');
-                return;
+                showStatus('Se încearcă reconectarea...', 'loading');
+                await authenticateUser();
+                if (!isAuthenticated) {
+                    showStatus('Nu s-a putut stabili conexiunea. Reîncărcați pagina.', 'error');
+                    return;
+                }
             }
             
             const uploadBtn = document.getElementById('uploadBtn');
@@ -572,6 +612,8 @@
         // Încarcă o singură poză
         async function uploadSinglePhoto(file) {
             try {
+                const { ID } = Appwrite;
+                
                 // Upload fișier în storage
                 const fileUpload = await storage.createFile(
                     APPWRITE_BUCKET_ID,
@@ -602,7 +644,14 @@
 
         // Încărcarea pozelor din database
         async function loadPhotos() {
-            if (!isAuthenticated) return;
+            if (!isAuthenticated) {
+                showStatus('Nu sunteți autentificat. Se încearcă reconectarea...', 'loading');
+                await authenticateUser();
+                if (!isAuthenticated) {
+                    showStatus('Nu s-a putut stabili conexiunea. Reîncărcați pagina.', 'error');
+                    return;
+                }
+            }
             
             showStatus('Se încarcă pozele...', 'loading');
             
@@ -639,7 +688,15 @@
                 
             } catch (error) {
                 console.error('Load photos error:', error);
-                showStatus('Eroare la încărcarea pozelor: ' + error.message, 'error');
+                showStatus('Eroare la încărcarea pozelor. Se încearcă din nou...', 'error');
+                
+                // Încearcă să se reconecteze și să încarce din nou
+                setTimeout(async () => {
+                    await authenticateUser();
+                    if (isAuthenticated) {
+                        await loadPhotos();
+                    }
+                }, 3000);
             }
         }
 
@@ -674,12 +731,14 @@
                     }
                 };
 
+                showStatus('Se accesează camera...', 'loading');
                 cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
                 const video = document.getElementById('cameraVideo');
                 video.srcObject = cameraStream;
 
                 document.getElementById('cameraSection').classList.remove('hidden');
                 document.getElementById('captureBtn').disabled = false;
+                hideStatus();
 
                 document.getElementById('cameraSection').scrollIntoView({ 
                     behavior: 'smooth' 
@@ -687,7 +746,7 @@
 
             } catch (error) {
                 console.error('Eroare la accesarea camerei:', error);
-                alert('Nu s-a putut accesa camera. Verificați permisiunile și încercați din nou.');
+                showStatus('Nu s-a putut accesa camera. Verificați permisiunile.', 'error');
             }
         }
 
@@ -704,7 +763,7 @@
             const canvas = document.getElementById('cameraCanvas');
             
             if (!video.videoWidth || !video.videoHeight) {
-                alert('Camera nu este încă gata. Încercați din nou în câteva secunde.');
+                showStatus('Camera nu este încă gata. Încercați din nou.', 'error');
                 return;
             }
             
@@ -713,35 +772,37 @@
             canvas.height = video.videoHeight;
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-            // Convertește canvas în blob
-            canvas.toBlob(async (blob) => {
-                const captureBtn = document.getElementById('captureBtn');
-                const originalText = captureBtn.textContent;
-                captureBtn.textContent = '⏳ Se salvează...';
-                captureBtn.disabled = true;
+            const captureBtn = document.getElementById('captureBtn');
+            const originalText = captureBtn.textContent;
+            captureBtn.textContent = '⏳ Se salvează...';
+            captureBtn.disabled = true;
 
-                try {
-                    // Creează file din blob
-                    const timestamp = Date.now();
-                    const file = new File([blob], `camera-${timestamp}.jpg`, { type: 'image/jpeg' });
-                    
-                    await uploadSinglePhoto(file);
-                    
-                    showStatus('Poza a fost salvată cu succes!', 'success');
-                    await loadPhotos();
-                    
-                    if (!galleryVisible) {
-                        toggleGallery();
-                    }
-                    
-                } catch (error) {
-                    console.error('Eroare la salvarea pozei:', error);
-                    showStatus('Eroare la salvarea pozei: ' + error.message, 'error');
-                } finally {
-                    captureBtn.textContent = originalText;
-                    captureBtn.disabled = false;
+            try {
+                // Convertește canvas în blob
+                const blob = await new Promise(resolve => {
+                    canvas.toBlob(resolve, 'image/jpeg', 0.9);
+                });
+                
+                // Creează file din blob
+                const timestamp = Date.now();
+                const file = new File([blob], `camera-${timestamp}.jpg`, { type: 'image/jpeg' });
+                
+                await uploadSinglePhoto(file);
+                
+                showStatus('Poza a fost salvată cu succes!', 'success');
+                await loadPhotos();
+                
+                if (!galleryVisible) {
+                    toggleGallery();
                 }
-            }, 'image/jpeg', 0.9);
+                
+            } catch (error) {
+                console.error('Eroare la salvarea pozei:', error);
+                showStatus('Eroare la salvarea pozei: ' + error.message, 'error');
+            } finally {
+                captureBtn.textContent = originalText;
+                captureBtn.disabled = false;
+            }
         }
 
         // ========== FUNCȚII MODAL ȘI GALERIE ==========
@@ -780,7 +841,7 @@
                 URL.revokeObjectURL(link.href);
             } catch (error) {
                 console.error('Download error:', error);
-                alert('Eroare la descărcarea pozei.');
+                showStatus('Eroare la descărcarea pozei.', 'error');
             }
         }
 
@@ -835,6 +896,28 @@
                 closeModal();
             }
         });
+
+        // Gestionare erori globale
+        window.addEventListener('error', function(e) {
+            console.error('Eroare JavaScript:', e.error);
+            if (!isAuthenticated) {
+                showStatus('A apărut o eroare. Se încearcă reconectarea...', 'error');
+                authenticateUser();
+            }
+        });
+
+        // Verificare periodică a conexiunii
+        setInterval(async () => {
+            if (isAuthenticated) {
+                try {
+                    await account.get();
+                } catch (error) {
+                    console.log('Sesiunea a expirat, se reautentifică...');
+                    isAuthenticated = false;
+                    await authenticateUser();
+                }
+            }
+        }, 300000); // Verifică la fiecare 5 minute
     </script>
 </body>
 </html>
