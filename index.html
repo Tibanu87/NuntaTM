@@ -400,8 +400,8 @@
                 <div class="photo-upload">
                     <h3>📸 Adaugă o poză nouă</h3>
                     <div class="form-group">
-                        <label for="photoInput">Selectează poza:</label>
-                        <input type="file" id="photoInput" accept="image/*" multiple capture="environment">
+                        <label for="photoInput">Selectează poza din galerie:</label>
+                        <input type="file" id="photoInput" accept="image/*" multiple>
                     </div>
                     <div style="display: flex; gap: 10px; flex-wrap: wrap;">
                         <button class="btn" onclick="uploadPhotos()" id="uploadBtn">📤 Încarcă Pozele</button>
@@ -866,9 +866,13 @@
         }
 
         async function refreshGallery() {
-            if (!currentGuest) {
-                alert('Vă rugăm să vă introduceți numele mai întâi!');
-                return;
+            if (!isAuthenticated) {
+                showStatus('Se conectează...', 'loading');
+                const authenticated = await authenticateUser();
+                if (!authenticated) {
+                    showStatus('Nu s-a putut stabili conexiunea', 'error');
+                    return;
+                }
             }
             
             showStatus('Se reîncarcă galeria...', 'loading');
@@ -905,7 +909,7 @@
             }
         });
 
-        // Allow pressing Enter to confirm guest name
+        // Permite introducerea numelui cu Enter
         document.getElementById('guestName').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
                 setGuestName();
@@ -915,10 +919,16 @@
         // Gestionare erori globale
         window.addEventListener('error', function(e) {
             console.error('Eroare JavaScript:', e.error);
+            showStatus('A apărut o eroare neașteptată', 'error');
         });
 
-        // Log pentru debugging
-        console.log('Aplicația pentru nuntă s-a încărcat cu succes!');
+        // Gestionare erori pentru promisiuni negestionate
+        window.addEventListener('unhandledrejection', function(e) {
+            console.error('Promise rejection negesționat:', e.reason);
+            if (e.reason && e.reason.message && e.reason.message.includes('fetch')) {
+                showStatus('Problemă de conectivitate. Verificați internetul.', 'error');
+            }
+        });
     </script>
 </body>
 </html>
