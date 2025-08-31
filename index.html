@@ -427,8 +427,7 @@
                 <div class="gallery-section" id="gallerySection">
                     <h3 style="color: #8b7355; margin-bottom: 20px;">📷 Galeria Foto</h3>
                     <div id="photoGallery" class="gallery">
-                        <div class="loading-spinner"></div>
-                        <p style="text-align: center; color: #999; grid-column: 1/-1;">Se încarcă pozele...</p>
+                        <!-- Galeria va fi populată dinamic -->
                     </div>
                 </div>
             </div>
@@ -468,23 +467,20 @@
         let cameraStream = null;
         let galleryVisible = true;
         let isAuthenticated = false;
-        
-        // Declarații Appwrite
         let client, account, databases, storage;
 
         // ========== FUNCȚII PRINCIPALE ==========
         
-        // Inițializare aplicație
-        window.addEventListener('load', async () => {
-            await initializeAppwrite();
+        // Inițializare aplicație - NU se autentifică automat
+        window.addEventListener('load', () => {
+            console.log('Aplicația s-a încărcat. Așteptăm numele utilizatorului.');
         });
 
-        // Inițializarea Appwrite
+        // Inițializarea Appwrite doar când e necesar
         async function initializeAppwrite() {
             try {
-                // Testează dacă Appwrite SDK este disponibil
                 if (typeof Appwrite === 'undefined') {
-                    throw new Error('SDK-ul Appwrite nu a fost încărcat');
+                    throw new Error('SDK-ul Appwrite nu este disponibil');
                 }
 
                 const { Client, Account, Databases, Storage, ID } = Appwrite;
@@ -498,42 +494,50 @@
                 databases = new Databases(client);
                 storage = new Storage(client);
 
-                // Încearcă autentificarea
-                await authenticateUser();
-                
-                // Dacă suntem autentificați, încearcă să încarce pozele
-                if (isAuthenticated) {
-                    await loadPhotos();
-                }
-                
+                console.log('Appwrite inițializat cu succes');
+                return true;
             } catch (error) {
                 console.error('Eroare la inițializarea Appwrite:', error);
-                showStatus('Eroare la inițializarea aplicației. Verificați conexiunea la internet.', 'error');
+                showStatus('Eroare la inițializarea aplicației', 'error');
+                return false;
             }
         }
 
-        // Autentificare anonimă
+        // Autentificare anonimă - apelată doar când e necesară
         async function authenticateUser() {
+            if (!client) {
+                const initialized = await initializeAppwrite();
+                if (!initialized) return false;
+            }
+
             try {
+                showStatus('Se conectează la server...', 'loading');
+                
                 // Încearcă să obții sesiunea curentă
                 const user = await account.get();
                 isAuthenticated = true;
                 console.log('Utilizator deja autentificat:', user);
+                hideStatus();
+                return true;
             } catch (error) {
                 console.log('Nu există sesiune activă, se creează sesiune anonimă...');
                 try {
                     // Creează sesiune anonimă
                     const session = await account.createAnonymousSession();
                     isAuthenticated = true;
-                    console.log('Sesiune anonimă creată:', session);
+                    console.log('Sesiune anonimă creată cu succes:', session);
+                    hideStatus();
+                    return true;
                 } catch (authError) {
                     console.error('Eroare la autentificare:', authError);
-                    showStatus('Nu s-a putut stabili conexiunea. Verificați internetul și reîncărcați pagina.', 'error');
+                    showStatus('Nu s-a putut stabili conexiunea cu serverul', 'error');
+                    return false;
                 }
             }
         }
 
-        function setGuestName() {
+        // Setarea numelui utilizatorului
+        async function setGuestName() {
             const nameInput = document.getElementById('guestName');
             const name = nameInput.value.trim();
             
@@ -543,22 +547,20 @@
             }
             
             currentGuest = name;
+            
+            // Ascunde formularul de bun venit și arată aplicația principală
             document.getElementById('welcomeForm').classList.add('hidden');
             document.getElementById('mainApp').classList.remove('hidden');
             
             const welcomeMsg = document.getElementById('welcomeMessage');
             welcomeMsg.innerHTML = `<strong>Bun venit, ${currentGuest}!</strong> Acum puteți adăuga poze și vedea pozele celorlalților invitați.`;
             
-            // Încearcă să încarce pozele doar dacă suntem autentificați
-            if (isAuthenticated) {
-                loadPhotos();
+            // ACUM încercăm să ne autentificăm și să încărcăm pozele
+            const authenticated = await authenticateUser();
+            if (authenticated) {
+                await loadPhotos();
             } else {
-                showStatus('Se încearcă reconectarea...', 'loading');
-                authenticateUser().then(() => {
-                    if (isAuthenticated) {
-                        loadPhotos();
-                    }
-                });
+                showStatus('Problemă la conectarea cu serverul. Unele funcții ar putea să nu meargă.', 'error');
             }
         }
 
@@ -572,11 +574,11 @@
                 return;
             }
 
+            // Verifică autentificarea
             if (!isAuthenticated) {
-                showStatus('Se încearcă reconectarea...', 'loading');
-                await authenticateUser();
-                if (!isAuthenticated) {
-                    showStatus('Nu s-a putut stabili conexiunea. Reîncărcați pagina.', 'error');
+                const authenticated = await authenticateUser();
+                if (!authenticated) {
+                    showStatus('Nu s-a putut stabili conexiunea cu serverul', 'error');
                     return;
                 }
             }
@@ -645,10 +647,9 @@
         // Încărcarea pozelor din database
         async function loadPhotos() {
             if (!isAuthenticated) {
-                showStatus('Nu sunteți autentificat. Se încearcă reconectarea...', 'loading');
-                await authenticateUser();
-                if (!isAuthenticated) {
-                    showStatus('Nu s-a putut stabili conexiunea. Reîncărcați pagina.', 'error');
+                const authenticated = await authenticateUser();
+                if (!authenticated) {
+                    showStatus('Nu s-a putut încărca galeria', 'error');
                     return;
                 }
             }
@@ -688,15 +689,7 @@
                 
             } catch (error) {
                 console.error('Load photos error:', error);
-                showStatus('Eroare la încărcarea pozelor. Se încearcă din nou...', 'error');
-                
-                // Încearcă să se reconecteze și să încarce din nou
-                setTimeout(async () => {
-                    await authenticateUser();
-                    if (isAuthenticated) {
-                        await loadPhotos();
-                    }
-                }, 3000);
+                showStatus('Eroare la încărcarea pozelor', 'error');
             }
         }
 
@@ -723,6 +716,8 @@
         // ========== FUNCȚII CAMERA ==========
         async function openCamera() {
             try {
+                showStatus('Se accesează camera...', 'loading');
+                
                 const constraints = {
                     video: {
                         facingMode: 'environment',
@@ -731,7 +726,6 @@
                     }
                 };
 
-                showStatus('Se accesează camera...', 'loading');
                 cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
                 const video = document.getElementById('cameraVideo');
                 video.srcObject = cameraStream;
@@ -746,7 +740,7 @@
 
             } catch (error) {
                 console.error('Eroare la accesarea camerei:', error);
-                showStatus('Nu s-a putut accesa camera. Verificați permisiunile.', 'error');
+                showStatus('Nu s-a putut accesa camera. Verificați permisiunile în browser.', 'error');
             }
         }
 
@@ -763,8 +757,17 @@
             const canvas = document.getElementById('cameraCanvas');
             
             if (!video.videoWidth || !video.videoHeight) {
-                showStatus('Camera nu este încă gata. Încercați din nou.', 'error');
+                showStatus('Camera nu este încă gata. Încercați din nou în câteva secunde.', 'error');
                 return;
+            }
+
+            // Verifică autentificarea înainte de a face poza
+            if (!isAuthenticated) {
+                const authenticated = await authenticateUser();
+                if (!authenticated) {
+                    showStatus('Nu s-a putut stabili conexiunea cu serverul', 'error');
+                    return;
+                }
             }
             
             const ctx = canvas.getContext('2d');
@@ -863,6 +866,11 @@
         }
 
         async function refreshGallery() {
+            if (!currentGuest) {
+                alert('Vă rugăm să vă introduceți numele mai întâi!');
+                return;
+            }
+            
             showStatus('Se reîncarcă galeria...', 'loading');
             await loadPhotos();
         }
@@ -897,27 +905,20 @@
             }
         });
 
-        // Gestionare erori globale
-        window.addEventListener('error', function(e) {
-            console.error('Eroare JavaScript:', e.error);
-            if (!isAuthenticated) {
-                showStatus('A apărut o eroare. Se încearcă reconectarea...', 'error');
-                authenticateUser();
+        // Allow pressing Enter to confirm guest name
+        document.getElementById('guestName').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                setGuestName();
             }
         });
 
-        // Verificare periodică a conexiunii
-        setInterval(async () => {
-            if (isAuthenticated) {
-                try {
-                    await account.get();
-                } catch (error) {
-                    console.log('Sesiunea a expirat, se reautentifică...');
-                    isAuthenticated = false;
-                    await authenticateUser();
-                }
-            }
-        }, 300000); // Verifică la fiecare 5 minute
+        // Gestionare erori globale
+        window.addEventListener('error', function(e) {
+            console.error('Eroare JavaScript:', e.error);
+        });
+
+        // Log pentru debugging
+        console.log('Aplicația pentru nuntă s-a încărcat cu succes!');
     </script>
 </body>
 </html>
