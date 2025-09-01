@@ -134,6 +134,7 @@
             box-shadow: 0 5px 15px rgba(0,0,0,0.1);
             transition: transform 0.3s;
             cursor: pointer;
+            position: relative;
         }
 
         .photo-item:hover {
@@ -144,6 +145,34 @@
             width: 100%;
             height: 200px;
             object-fit: cover;
+        }
+
+        .delete-photo-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(244, 67, 54, 0.9);
+            border: none;
+            border-radius: 50%;
+            width: 35px;
+            height: 35px;
+            font-size: 16px;
+            cursor: pointer;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            transition: background 0.2s;
+            z-index: 10;
+        }
+
+        .delete-photo-btn:hover {
+            background: rgba(244, 67, 54, 1);
+            transform: scale(1.1);
+        }
+
+        .photo-item:hover .delete-photo-btn {
+            display: flex;
         }
 
         .photo-info {
@@ -409,8 +438,8 @@
 <body>
     <div class="container">
         <div class="header">
-            <h2>💕 Vrem să vedem nunta noastră prin ochii tăi! 💕</h2>
-            <p>🎉 Maria și Tiberiu - 6 Septembrie 2025 🎉</p>
+            <h1>💕 Poze de la Nuntă 💕</h1>
+            <p>Împărtășește momentele frumoase cu noi!</p>
         </div>
         
         <div class="content">
@@ -418,9 +447,9 @@
             <div id="statusMessage" class="status-message hidden"></div>
 
             <div id="welcomeForm" class="welcome-form">
-                <h3>Bună! Te rugăm să ne spui cine ești:</h3>
+                <h3>Bună ziua! Vă rugăm să vă introduceți numele:</h3>
                 <div class="form-group">
-                    <label for="guestName">Numele tău, te rog:</label>
+                    <label for="guestName">Numele dumneavoastră:</label>
                     <input type="text" id="guestName" placeholder="ex: Ana și Mihai Popescu">
                 </div>
                 <button class="btn" onclick="setGuestName()">Confirmă</button>
@@ -455,6 +484,7 @@
                         <button class="btn" onclick="uploadPhotos()" id="uploadBtn">📤 Încarcă Pozele</button>
                         <button class="btn" onclick="toggleGallery()" id="galleryToggleBtn" style="background: linear-gradient(45deg, #2196f3, #1976d2);">🖼️ Vezi Galerie</button>
                         <button class="btn" onclick="refreshGallery()" id="refreshBtn" style="background: linear-gradient(45deg, #ff9800, #f57c00);">🔄 Reîncarcă</button>
+                        <button class="btn" onclick="cleanupStorage()" style="background: linear-gradient(45deg, #e91e63, #c2185b);">🧹 Curăță Storage</button>
                     </div>
 
                     <!-- Afișare fișiere selectate -->
@@ -752,6 +782,13 @@
                         });
                     } catch (fileError) {
                         console.error('Eroare la încărcarea fișierului:', fileError);
+                        // Încearcă să ștergi fișierul din storage dacă nu mai există în baza de date
+                        try {
+                            await storage.deleteFile(APPWRITE_BUCKET_ID, doc.fileId);
+                            console.log(`Fișier ștars din storage: ${doc.fileId}`);
+                        } catch (deleteError) {
+                            console.log(`Fișierul ${doc.fileId} nu există în storage sau nu poate fi șters`);
+                        }
                     }
                 }
                 
@@ -764,6 +801,100 @@
             } catch (error) {
                 console.error('Load photos error:', error);
                 showStatus('Eroare la încărcarea pozelor', 'error');
+            }
+        }
+
+        // Funcție pentru ștergerea completă a unei poze
+        async function deletePhoto(photoIndex) {
+            if (!isAuthenticated) {
+                showStatus('Nu sunteți autentificat', 'error');
+                return;
+            }
+
+            const photo = photos[photoIndex];
+            if (!photo) return;
+
+            const confirmDelete = confirm(`Sunteți sigur că doriți să ștergeți poza încărcată de ${photo.guestName}?`);
+            if (!confirmDelete) return;
+
+            try {
+                showStatus('Se șterge poza...', 'loading');
+
+                // Șterge din baza de date
+                try {
+                    await databases.deleteDocument(
+                        APPWRITE_DATABASE_ID,
+                        APPWRITE_COLLECTION_ID,
+                        photo.id
+                    );
+                    console.log('Poza ștearsă din baza de date');
+                } catch (dbError) {
+                    console.log('Poza nu mai există în baza de date:', dbError);
+                }
+
+                // Șterge din storage
+                try {
+                    await storage.deleteFile(APPWRITE_BUCKET_ID, photo.fileId);
+                    console.log('Fișierul șters din storage');
+                } catch (storageError) {
+                    console.log('Fișierul nu mai există în storage:', storageError);
+                }
+
+                showStatus('Poza a fost ștearsă cu succes!', 'success');
+                
+                // Reîncarcă galeria
+                await loadPhotos();
+
+            } catch (error) {
+                console.error('Eroare la ștergerea pozei:', error);
+                showStatus('Eroare la ștergerea pozei: ' + error.message, 'error');
+            }
+        }
+
+        // Funcție pentru curățarea storage-ului (șterge fișierele orfane)
+        async function cleanupStorage() {
+            if (!isAuthenticated) {
+                showStatus('Nu sunteți autentificat', 'error');
+                return;
+            }
+
+            const confirmCleanup = confirm('Această operație va șterge toate fișierele din storage care nu mai au înregistrări în baza de date. Continuați?');
+            if (!confirmCleanup) return;
+
+            try {
+                showStatus('Se curăță storage-ul...', 'loading');
+
+                // Obține toate documentele din baza de date
+                const dbResponse = await databases.listDocuments(
+                    APPWRITE_DATABASE_ID,
+                    APPWRITE_COLLECTION_ID
+                );
+                
+                const validFileIds = new Set(dbResponse.documents.map(doc => doc.fileId));
+
+                // Obține toate fișierele din storage
+                const storageResponse = await storage.listFiles(APPWRITE_BUCKET_ID);
+                
+                let deletedCount = 0;
+
+                for (let file of storageResponse.files) {
+                    if (!validFileIds.has(file.$id)) {
+                        try {
+                            await storage.deleteFile(APPWRITE_BUCKET_ID, file.$id);
+                            console.log(`Fișier ștars: ${file.$id}`);
+                            deletedCount++;
+                        } catch (deleteError) {
+                            console.error(`Nu s-a putut șterge fișierul ${file.$id}:`, deleteError);
+                        }
+                    }
+                }
+
+                showStatus(`Storage curățat! ${deletedCount} fișiere șterse.`, 'success');
+                await loadPhotos();
+
+            } catch (error) {
+                console.error('Eroare la curățarea storage-ului:', error);
+                showStatus('Eroare la curățarea storage-ului: ' + error.message, 'error');
             }
         }
 
@@ -783,6 +914,7 @@
                         <div class="guest-name">${photo.guestName}</div>
                         <div class="upload-time">${photo.uploadTime}</div>
                     </div>
+                    <button class="delete-photo-btn" onclick="event.stopPropagation(); deletePhoto(${index})" title="Șterge poza">🗑️</button>
                 </div>
             `).join('');
         }
@@ -1011,5 +1143,3 @@
     </script>
 </body>
 </html>
-
-
