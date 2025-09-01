@@ -149,21 +149,23 @@
 
         .delete-photo-btn {
             position: absolute;
-            top: 10px;
-            right: 10px;
+            top: 8px;
+            right: 8px;
             background: rgba(244, 67, 54, 0.9);
             border: none;
             border-radius: 50%;
-            width: 35px;
-            height: 35px;
-            font-size: 16px;
+            width: 32px;
+            height: 32px;
+            font-size: 14px;
             cursor: pointer;
-            display: none;
+            display: flex;
             align-items: center;
             justify-content: center;
             color: white;
-            transition: background 0.2s;
+            transition: all 0.2s;
             z-index: 10;
+            opacity: 0;
+            transform: scale(0.8);
         }
 
         .delete-photo-btn:hover {
@@ -172,7 +174,20 @@
         }
 
         .photo-item:hover .delete-photo-btn {
-            display: flex;
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        /* Pentru mobile, arată întotdeauna butonul de ștergere */
+        @media (max-width: 768px) {
+            .delete-photo-btn {
+                opacity: 0.7;
+                transform: scale(1);
+            }
+            
+            .photo-item:hover .delete-photo-btn {
+                opacity: 1;
+            }
         }
 
         .photo-info {
@@ -807,18 +822,26 @@
         // Funcție pentru ștergerea completă a unei poze
         async function deletePhoto(photoIndex) {
             if (!isAuthenticated) {
-                showStatus('Nu sunteți autentificat', 'error');
-                return;
+                const authenticated = await authenticateUser();
+                if (!authenticated) {
+                    showStatus('Nu sunteți autentificat', 'error');
+                    return;
+                }
             }
 
             const photo = photos[photoIndex];
-            if (!photo) return;
+            if (!photo) {
+                console.error('Poza nu există la indexul:', photoIndex);
+                return;
+            }
 
             const confirmDelete = confirm(`Sunteți sigur că doriți să ștergeți poza încărcată de ${photo.guestName}?`);
             if (!confirmDelete) return;
 
             try {
                 showStatus('Se șterge poza...', 'loading');
+
+                console.log('Se șterge poza:', photo);
 
                 // Șterge din baza de date
                 try {
@@ -827,26 +850,28 @@
                         APPWRITE_COLLECTION_ID,
                         photo.id
                     );
-                    console.log('Poza ștearsă din baza de date');
+                    console.log('✓ Poza ștearsă din baza de date');
                 } catch (dbError) {
-                    console.log('Poza nu mai există în baza de date:', dbError);
+                    console.log('Poza nu mai există în baza de date sau eroare:', dbError);
                 }
 
                 // Șterge din storage
                 try {
                     await storage.deleteFile(APPWRITE_BUCKET_ID, photo.fileId);
-                    console.log('Fișierul șters din storage');
+                    console.log('✓ Fișierul șters din storage');
                 } catch (storageError) {
-                    console.log('Fișierul nu mai există în storage:', storageError);
+                    console.log('Fișierul nu mai există în storage sau eroare:', storageError);
                 }
 
                 showStatus('Poza a fost ștearsă cu succes!', 'success');
                 
                 // Reîncarcă galeria
-                await loadPhotos();
+                setTimeout(() => {
+                    loadPhotos();
+                }, 1000);
 
             } catch (error) {
-                console.error('Eroare la ștergerea pozei:', error);
+                console.error('Eroare generală la ștergerea pozei:', error);
                 showStatus('Eroare la ștergerea pozei: ' + error.message, 'error');
             }
         }
@@ -854,8 +879,11 @@
         // Funcție pentru curățarea storage-ului (șterge fișierele orfane)
         async function cleanupStorage() {
             if (!isAuthenticated) {
-                showStatus('Nu sunteți autentificat', 'error');
-                return;
+                const authenticated = await authenticateUser();
+                if (!authenticated) {
+                    showStatus('Nu sunteți autentificat', 'error');
+                    return;
+                }
             }
 
             const confirmCleanup = confirm('Această operație va șterge toate fișierele din storage care nu mai au înregistrări în baza de date. Continuați?');
@@ -867,30 +895,50 @@
                 // Obține toate documentele din baza de date
                 const dbResponse = await databases.listDocuments(
                     APPWRITE_DATABASE_ID,
-                    APPWRITE_COLLECTION_ID
+                    APPWRITE_COLLECTION_ID,
+                    [],
+                    1000 // Limitează la 1000 de documente
                 );
                 
                 const validFileIds = new Set(dbResponse.documents.map(doc => doc.fileId));
+                console.log('File IDs valide din baza de date:', validFileIds);
 
                 // Obține toate fișierele din storage
-                const storageResponse = await storage.listFiles(APPWRITE_BUCKET_ID);
+                const storageResponse = await storage.listFiles(
+                    APPWRITE_BUCKET_ID,
+                    [],
+                    1000 // Limitează la 1000 de fișiere
+                );
+                
+                console.log('Fișiere în storage:', storageResponse.files.length);
                 
                 let deletedCount = 0;
+                let errorCount = 0;
 
                 for (let file of storageResponse.files) {
                     if (!validFileIds.has(file.$id)) {
+                        console.log(`Șterge fișierul orfan: ${file.$id}`);
                         try {
                             await storage.deleteFile(APPWRITE_BUCKET_ID, file.$id);
-                            console.log(`Fișier ștars: ${file.$id}`);
                             deletedCount++;
+                            console.log(`✓ Fișier șters: ${file.$id}`);
                         } catch (deleteError) {
-                            console.error(`Nu s-a putut șterge fișierul ${file.$id}:`, deleteError);
+                            errorCount++;
+                            console.error(`✗ Nu s-a putut șterge fișierul ${file.$id}:`, deleteError);
                         }
                     }
                 }
 
-                showStatus(`Storage curățat! ${deletedCount} fișiere șterse.`, 'success');
-                await loadPhotos();
+                if (deletedCount > 0) {
+                    showStatus(`Storage curățat! ${deletedCount} fișiere șterse.${errorCount > 0 ? ` ${errorCount} erori.` : ''}`, 'success');
+                } else {
+                    showStatus('Nu au fost găsite fișiere de șters.', 'success');
+                }
+                
+                // Reîncarcă galeria după curățare
+                setTimeout(() => {
+                    loadPhotos();
+                }, 1000);
 
             } catch (error) {
                 console.error('Eroare la curățarea storage-ului:', error);
